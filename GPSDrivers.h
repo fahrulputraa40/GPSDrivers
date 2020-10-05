@@ -25,7 +25,8 @@ typedef enum GPSDrivers_CMD_enum{
 	Init_Time,
 	Init_Loc_and_Time,
 	AGPS,
-	SetConstellation
+	SetConstellation,
+	Config_Date_Time
 }GPSDrivers_CMD;
 
 typedef struct GPSDrivers_Def{
@@ -47,13 +48,17 @@ typedef struct GPSDrivers_Def{
 	uint8_t (*write)(uint8_t *pData, uint8_t len);
 	uint8_t (*sendCommand)(struct GPSDrivers_Def *GPSDriver, const char *cmd, ...);
 	uint8_t (*GPSDevice_Command)(struct GPSDrivers_Def *GPSDriver,GPSDrivers_CMD cmd, void *args);
+	unsigned long (*millis)();
+	void (*delay)(unsigned long Delay);
 }GPSDrivers;
 
 void GPSDrivers__construct(GPSDrivers *GPSDriver_def,
 		uint8_t (*GPSDevice_Command)(GPSDrivers *GPSDriver,GPSDrivers_CMD cmd, void *args),
 		uint8_t (*availableFunction)(),
 		uint8_t (*readFunction)(),
-		uint8_t (*writeFunction)(uint8_t *pData, uint8_t len));
+		uint8_t (*writeFunction)(uint8_t *pData, uint8_t len),
+		unsigned long (*mil)(),
+		void (*fDelay)(unsigned long Delay));
 
 void GPSDrivers_enbaleRMCOnly(GPSDrivers *GPSDriver);
 
@@ -71,9 +76,13 @@ void GPSDriver_setGNSSconstellation(GPSDrivers *GPSDriver, uint8_t format);
 
 void GPSDriver_setAGPS(GPSDrivers *GPSDriver, uint8_t format);
 
-double GPSDrivers_getLongitude(GPSDrivers *GPSDriver);
+double GPSDrivers_getLongitudeAsDMS(GPSDrivers *GPSDriver);
 
-double GPSDrivers_getLatitude(GPSDrivers *GPSDriver);
+double GPSDrivers_getLatitudeAsDMS(GPSDrivers *GPSDriver);
+
+double GPSDrivers_getLongitudeAsDecimal(GPSDrivers *GPSDriver);
+
+double GPSDrivers_getLatitudeAsDecimal(GPSDrivers *GPSDriver);
 
 uint8_t GPSDrivers_getDate(GPSDrivers *GPSDriver);
 
@@ -97,5 +106,12 @@ char *GPSDriver_d2s(double f, char *buf, uint8_t precision);
 
 void GPSDriver_decodRMC(GPSDrivers *GPSDriver,char *buf);
 
-extern char Driverbuff[90];
+void GPSDrivers_configDateAndTime(GPSDrivers *GPSDriver);
+
+void GPSDrivers_loop(GPSDrivers *GPSDriver);
+
+uint8_t GPSDrivers_dataIsValid(GPSDrivers *GPSDriver);
+
+extern char Driverbuff[90], DriverSerBuffer[100];
+
 #endif /* GPSDRIVERS_GPSDRIVERS_H_ */

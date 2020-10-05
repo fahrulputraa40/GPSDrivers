@@ -27,12 +27,15 @@ void GPSDrivers__construct(GPSDrivers *GPSDriver_def,
 		uint8_t (*GPSDevice_Command)(GPSDrivers *GPSDriver,GPSDrivers_CMD cmd, void *args),
 		uint8_t (*availableFunction)(),
 		uint8_t (*readFunction)(),
-		uint8_t (*writeFunction)(uint8_t *pData, uint8_t len)) {
+		uint8_t (*writeFunction)(uint8_t *pData, uint8_t len),
+		unsigned long (*mil)(),
+		void (*fDelay)(unsigned long Delay)) {
 	GPSDriver_def->write = writeFunction;
 	GPSDriver_def->GPSDevice_Command = GPSDevice_Command;
 	GPSDriver_def->available = availableFunction;
 	GPSDriver_def->sendCommand = GPSDrivers_sendCommand;
-	GPSDriver_def->read = readFunction;
+	GPSDriver_def->read = readFunction;GPSDriver_def->millis = mil;
+	GPSDriver_def->delay = fDelay;
 }
 
 void GPSDrivers_enbaleRMCOnly(GPSDrivers *GPSDriver){
@@ -59,12 +62,38 @@ uint8_t GPSDrivers_sendCommand(GPSDrivers *GPSDriver, const char *data, ...){
 //	return 1;
 }
 
-double GPSDrivers_getLongitude(GPSDrivers *GPSDriver){
+double GPSDrivers_getLongitudeAsDMS(GPSDrivers *GPSDriver){
 	return GPSDriver->longitude;
 }
 
-double GPSDrivers_getLatitude(GPSDrivers *GPSDriver){
+double GPSDrivers_getLatitudeAsDMS(GPSDrivers *GPSDriver){
 	return GPSDriver->latitude;
+}
+
+double GPSDrivers_getLongitudeAsDecimal(GPSDrivers *GPSDriver){
+	double dec = 0;
+	double temp;
+	dec = (int)(GPSDriver->longitude / 100);
+	temp = ((int)(GPSDriver->longitude)%100);
+	temp /= 60;
+	dec += temp;
+	temp = GPSDriver->longitude - ((int)GPSDriver->longitude);
+	temp /= 60;
+	dec += temp;
+	return GPSDriver->longitudeRef == 'W' ? dec*-1 : dec;
+}
+
+double GPSDrivers_getLatitudeAsDecimal(GPSDrivers *GPSDriver){
+	double dec = 0;
+	double temp;
+	dec = (int)(GPSDriver->latitude / 100);
+	temp = ((int)(GPSDriver->latitude)%100);
+	temp /= 60;
+	dec += temp;
+	temp = GPSDriver->latitude - ((int)GPSDriver->latitude);
+	temp /= 60;
+	dec += temp;
+	return GPSDriver->latitudeRef == 'S' ? dec*-1 : dec;
 }
 
 uint8_t GPSDrivers_getDate(GPSDrivers *GPSDriver){
@@ -73,6 +102,10 @@ uint8_t GPSDrivers_getDate(GPSDrivers *GPSDriver){
 
 uint8_t GPSDrivers_getMonth(GPSDrivers *GPSDriver){
 	return GPSDriver->GPSL89_TimeStamp.month;
+}
+
+uint8_t GPSDrivers_dataIsValid(GPSDrivers *GPSDriver){
+	return GPSDriver->isValid;
 }
 
 uint8_t GPSDrivers_getYear(GPSDrivers *GPSDriver){
@@ -201,6 +234,12 @@ char *GPSDriver_d2s(double f, char *buf, uint8_t precision){
 
 char *GPSDriver_parseTimeStamp(char *src, char *dest, uint8_t index){
 	src+=index;
+
+	if(strlen(src) < 2){
+		dest[0] = '0';
+		dest[1]  ='0';
+		return dest;
+	}
 	for(uint8_t c = 0;c< 2;c++){
 		dest[c] = src[c];
 	}
@@ -208,38 +247,37 @@ char *GPSDriver_parseTimeStamp(char *src, char *dest, uint8_t index){
 }
 
 void GPSDriver_decodRMC(GPSDrivers *GPSDriver,char *buf){
-	const char *GPRMC = "$GPRMC,";
+	const char *GPRMC = "RMC,";
 	char *pointer;
 	char *str;
-	if(strncmp(buf, GPRMC,strlen(GPRMC)) != 0){
-		GPSDriver->isValid = 5;
+	if(strstr(buf, GPRMC) == NULL){
 		return;
 	}
 	pointer = strstr(buf, GPRMC)+strlen(GPRMC);
 	str = strtok_r(pointer, ",", &pointer);
 	for(uint8_t i = 0; i<10;i++){
-		if(i == 0 && str != NULL){//timestamp
+		if(i == 0 && str != NULL && strlen(str) > 0){//timestamp
 			char temp[2];
 			GPSDriver->GPSL89_TimeStamp.hour = atoi(GPSDriver_parseTimeStamp(str, temp, 0));
 			GPSDriver->GPSL89_TimeStamp.minute = atoi(GPSDriver_parseTimeStamp(str, temp, 2));
 			GPSDriver->GPSL89_TimeStamp.second = atoi(GPSDriver_parseTimeStamp(str, temp, 4));
 		}
-		else if(i==1 && str != NULL){
+		else if(i==1 && str != NULL && strlen(str) > 0){
 			GPSDriver->isValid = str[0] == 'A' ? 1 : 0;
 		}
-		else if(i==2 && str != NULL){
+		else if(i==2 && str != NULL && strlen(str) > 0){
 			GPSDriver->latitude = atof(str);
 		}
-		else if(i==3 && str != NULL){
+		else if(i==3 && str != NULL && strlen(str) > 0){
 			GPSDriver->latitudeRef = str[0] == 'S' ? 'S' : 'N';
 		}
-		else if(i==4 && str != NULL){
+		else if(i==4 && str != NULL && strlen(str) > 0){
 			GPSDriver->longitude = atof(str);
 		}
-		else if(i==5 && str != NULL){
+		else if(i==5 && str != NULL && strlen(str) > 0){
 			GPSDriver->longitudeRef = str[0] == 'E' ? 'E' : 'W';
 		}
-		else if(i==8 && str != NULL){
+		else if(i==8 && str != NULL && strlen(str) > 0){
 			char temp[2];
 			GPSDriver->GPSL89_TimeStamp.date = atoi(GPSDriver_parseTimeStamp(str, temp, 0));
 			GPSDriver->GPSL89_TimeStamp.month = atoi(GPSDriver_parseTimeStamp(str, temp, 2));
@@ -248,3 +286,37 @@ void GPSDriver_decodRMC(GPSDrivers *GPSDriver,char *buf){
 		str = strtok_r(pointer, ",", &pointer);
 	}
 }
+
+void GPSDrivers_configDateAndTime(GPSDrivers *GPSDriver){
+	GPSDriver->GPSDevice_Command(GPSDriver, Config_Date_Time, NULL);
+}
+
+void GPSDrivers_loop(GPSDrivers *GPSDriver){
+	if(GPSDriver->available == NULL || GPSDriver->read == NULL)
+		return;
+	memset(DriverSerBuffer, '\0', sizeof(DriverSerBuffer)-1);
+	uint8_t pos = 0;
+	unsigned long Millis = GPSDriver->millis();
+	while(GPSDriver->millis() - Millis < 1000){
+		if(GPSDriver->available() > 0)
+			{
+				DriverSerBuffer[pos] = (char)GPSDriver->read();
+				if(DriverSerBuffer[pos-1] == '\r' && DriverSerBuffer[pos] == '\n')
+					break;
+				pos++;
+			}
+			if(GPSDriver->delay != NULL)
+				GPSDriver->delay(100);
+	}
+	GPSDriver_decodRMC(GPSDriver, DriverSerBuffer);
+}
+
+//if(GPSDriver->available() > 0)
+//		{
+//			DriverSerBuffer[pos] = (char)GPSDriver->read();
+//			pos++;
+//			if(DriverSerBuffer[pos] == '\r' || DriverSerBuffer[pos] == '\n')
+//				break;
+//		}
+//		if(GPSDriver->delay != NULL)
+//			GPSDriver->delay(100);

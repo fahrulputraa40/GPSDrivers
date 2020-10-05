@@ -11,8 +11,7 @@ uint8_t GPSL89_CommandList(GPSDrivers *GPSDriver, GPSDrivers_CMD cmd,
 		void *args) {
 	switch (cmd) {
 	case enambeRMCOnly: {
-		GPSDriver->sendCommand(GPSDriver, "PSTMCFGMSGL,%d,%d,0x%08X,0x%08X", 1,
-				50, 0x40, 0x00); // Enable RMC only and timesampling 5s
+		GPSDriver->sendCommand(GPSDriver, "PSTMCFGMSGL,%d,%d,0x%08X,0x%08X", 1,	50, 0x40,0x10); // Enable RMC only and timesampling 5s
 	}
 		break;
 	case PerformWarm:
@@ -75,6 +74,9 @@ uint8_t GPSL89_CommandList(GPSDrivers *GPSDriver, GPSDrivers_CMD cmd,
 					"PSTMSETCONSTMASK,%c",
 					'0' + *((uint8_t*) args));
 			break;
+	case Config_Date_Time:
+		GPSDriver->sendCommand(GPSDriver, "PSTMCFGTDATA,1964,3443,50,00000012");
+		break;
 
 	default:
 		break;
